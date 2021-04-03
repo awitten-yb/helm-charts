@@ -151,6 +151,47 @@ spec:
           {{- if .Values.server.extraVolumeMounts }}
           {{ toYaml .Values.server.extraVolumeMounts | nindent 12 }}
           {{- end }}
+              {{- if .Values.server.thanos.enabled }}
+        - name: thanos-sidecar
+          image: "{{ .Values.server.thanos.image }}"
+          imagePullPolicy: "{{ .Values.server.thanos.imagePullPolicy }}"
+          env:
+          - name: AWS_ACCESS_KEY_ID
+            valueFrom:
+              secretKeyRef:
+                name: minio-secret
+                key: accesskey
+          - name: AWS_SECRET_ACCESS_KEY
+            valueFrom:
+              secretKeyRef:
+                name: minio-secret
+                key: secretkey
+          args:
+          - sidecar
+          - --http-address=0.0.0.0:19090
+          - --grpc-address=0.0.0.0:10901
+          - --reloader.config-file={{ .Values.server.configPath }}
+          - --shipper.upload-compacted
+          - --prometheus.url=http://127.0.0.1:9090
+          - |
+            --objstore.config=type: s3
+            config:
+              bucket: "{{ .Values.server.thanos.bucketName }}" 
+              endpoint: "minio.{{ .Release.Namespace }}.svc.cluster.local" 
+              access_key: $(AWS_ACCESS_KEY_ID)
+              secret_key: $(AWS_SECRET_ACCESS_KEY)
+          ports:
+          - containerPort: 10901
+            name: grpc
+          - containerPort: 19090
+            name: http
+          volumeMounts:
+          - name: config-volume
+            mountPath: /etc/config
+          - name: storage-volume
+            mountPath: {{ .Values.server.persistentVolume.mountPath }}
+            subPath: "{{ .Values.server.persistentVolume.subPath }}"
+        {{- end}}    
     {{- if .Values.server.sidecarContainers }}
       {{- range $name, $spec :=  .Values.server.sidecarContainers }}
         - name: {{ $name }}
